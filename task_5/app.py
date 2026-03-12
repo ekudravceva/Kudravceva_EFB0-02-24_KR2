@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Response, HTTPException, Form, Cookie
 from fastapi.responses import JSONResponse
 import uuid
+import time
 from typing import Optional
 from itsdangerous import URLSafeSerializer
 
@@ -28,13 +29,15 @@ async def login(
 ):
     if username in VALID_USERS and VALID_USERS[username]["password"] == password:
         user_id = VALID_USERS[username]["user_id"]
-        session_token = serializer.dumps(user_id)
+        timestamp = int(time.time())
+        session_data = f"{user_id}.{timestamp}"
+        session_token = serializer.dumps(session_data)
         
         response.set_cookie(
             key="session_token",
             value=session_token,
             httponly=True,
-            max_age=3600,
+            max_age=300,
             secure=False,
             samesite="lax"
         )
@@ -45,6 +48,7 @@ async def login(
 
 @app.get("/profile")
 async def get_profile(
+    response: Response,
     session_token: Optional[str] = Cookie(None)
 ):
     if not session_token:
@@ -54,11 +58,22 @@ async def get_profile(
         )
 
     try:
-        user_id = serializer.loads(session_token)
+        session_data = serializer.loads(session_token)
+        user_id, timestamp_str = session_data.split(".")
+        timestamp = int(timestamp_str)
     except Exception:
         return JSONResponse(
             status_code=401,
-            content={"message": "Unauthorized"}
+            content={"message": "Invalid session"}
+        )
+    
+    current_time = int(time.time())
+    time_diff = current_time - timestamp
+    
+    if time_diff >= 300:
+        return JSONResponse(
+            status_code=401,
+            content={"message": "Session expired"}
         )
     
     username = None
@@ -71,6 +86,20 @@ async def get_profile(
         return JSONResponse(
             status_code=401,
             content={"message": "User not found"}
+        )
+    
+    if time_diff >= 180:
+        new_timestamp = current_time
+        new_session_data = f"{user_id}.{new_timestamp}"
+        new_session_token = serializer.dumps(new_session_data)
+        
+        response.set_cookie(
+            key="session_token",
+            value=new_session_token,
+            httponly=True,
+            max_age=300,
+            secure=False,
+            samesite="lax"
         )
     
     return {
