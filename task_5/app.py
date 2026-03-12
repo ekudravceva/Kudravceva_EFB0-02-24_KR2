@@ -1,16 +1,24 @@
-from fastapi import FastAPI, Response, Request, HTTPException, Form, Cookie
+from fastapi import FastAPI, Response, HTTPException, Form, Cookie
 from fastapi.responses import JSONResponse
 import uuid
 from typing import Optional
+from itsdangerous import URLSafeSerializer
 
 app = FastAPI(title="Task 5 API")
 
-VALID_USERS = {
-    "user123": "password123",
-    "admin": "admin123"
-}
+SECRET_KEY = "secret-key-for-signing-cookies-ekud"
+serializer = URLSafeSerializer(SECRET_KEY)
 
-active_sessions = {}
+VALID_USERS = {
+    "user123": {
+        "password": "password123",
+        "user_id": str(uuid.uuid4())
+    },
+    "admin": {
+        "password": "admin123",
+        "user_id": str(uuid.uuid4())
+    }
+}
 
 @app.post("/login")
 async def login(
@@ -18,12 +26,9 @@ async def login(
     username: str = Form(...),
     password: str = Form(...)
 ):
-    if username in VALID_USERS and VALID_USERS[username] == password:
-        session_token = str(uuid.uuid4())
-        
-        active_sessions[session_token] = {
-            "username": username
-        }
+    if username in VALID_USERS and VALID_USERS[username]["password"] == password:
+        user_id = VALID_USERS[username]["user_id"]
+        session_token = serializer.dumps(user_id)
         
         response.set_cookie(
             key="session_token",
@@ -34,12 +39,12 @@ async def login(
             samesite="lax"
         )
         
-        return {"message": "Login successful", "username": username, "debug_session_token": session_token}
+        return {"message": "Login successful", "username": username}
     else:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-@app.get("/user")
-async def get_user(
+@app.get("/profile")
+async def get_profile(
     session_token: Optional[str] = Cookie(None)
 ):
     if not session_token:
@@ -48,15 +53,28 @@ async def get_user(
             content={"message": "Unauthorized"}
         )
 
-    if session_token not in active_sessions:
+    try:
+        user_id = serializer.loads(session_token)
+    except Exception:
         return JSONResponse(
             status_code=401,
             content={"message": "Unauthorized"}
         )
     
-    user_data = active_sessions[session_token]
+    username = None
+    for uname, data in VALID_USERS.items():
+        if data["user_id"] == user_id:
+            username = uname
+            break
+    
+    if username is None:
+        return JSONResponse(
+            status_code=401,
+            content={"message": "User not found"}
+        )
     
     return {
-        "username": user_data["username"],
+        "username": username,
+        "user_id": user_id,
         "message": "User profile information"
     }
