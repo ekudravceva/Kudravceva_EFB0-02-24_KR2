@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, HTTPException, Form, Cookie
+from fastapi import FastAPI, Response, HTTPException, Form, Cookie, Header
 from fastapi.responses import JSONResponse
 import uuid
 import time
@@ -106,4 +106,20 @@ async def get_profile(
         "username": username,
         "user_id": user_id,
         "message": "User profile information"
+    }
+
+@app.get("/headers")
+async def get_headers(
+    user_agent: Optional[str] = Header(None),
+    accept_language: Optional[str] = Header(None)
+):
+    if not user_agent:
+        raise HTTPException(status_code=400, detail="User-Agent header is required")
+    
+    if not accept_language:
+        raise HTTPException(status_code=400, detail="Accept-Language header is required")
+    
+    return {
+        "User-Agent": user_agent,
+        "Accept-Language": accept_language
     }
