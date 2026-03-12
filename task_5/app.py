@@ -4,6 +4,8 @@ import uuid
 import time
 from typing import Optional
 from itsdangerous import URLSafeSerializer
+from datetime import datetime
+from models import CommonHeaders
 
 app = FastAPI(title="Task 5 API")
 
@@ -109,17 +111,23 @@ async def get_profile(
     }
 
 @app.get("/headers")
-async def get_headers(
-    user_agent: Optional[str] = Header(None),
-    accept_language: Optional[str] = Header(None)
+async def get_headers(headers: CommonHeaders = Header(...)):
+    return {
+        "User-Agent": headers.user_agent,
+        "Accept-Language": headers.accept_language
+    }
+
+@app.get("/info")
+async def get_info(
+    response: Response,
+    headers: CommonHeaders = Header(...)
 ):
-    if not user_agent:
-        raise HTTPException(status_code=400, detail="User-Agent header is required")
-    
-    if not accept_language:
-        raise HTTPException(status_code=400, detail="Accept-Language header is required")
+    response.headers["X-Server-Time"] = datetime.now().isoformat()
     
     return {
-        "User-Agent": user_agent,
-        "Accept-Language": accept_language
+        "message": "Добро пожаловать! Ваши заголовки успешно обработаны.",
+        "headers": {
+            "User-Agent": headers.user_agent,
+            "Accept-Language": headers.accept_language
+        }
     }
